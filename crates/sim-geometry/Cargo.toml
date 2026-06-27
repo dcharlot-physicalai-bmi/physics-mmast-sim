@@ -1,0 +1,22 @@
+[package]
+name = "sim-geometry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Parametric vehicle geometry built on CadFuture's B-Rep kernel — derives mass, area, and tessellated meshes from NURBS solids"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+glam = { workspace = true }
+
+physical-brep = { workspace = true }
+physical-tessellation = { workspace = true }
+
+sim-core = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

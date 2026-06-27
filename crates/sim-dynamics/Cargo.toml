@@ -1,0 +1,27 @@
+[package]
+name = "sim-dynamics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "6-DOF rigid-body dynamics solver with MMAST module integration"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+nalgebra = { workspace = true }
+glam = { workspace = true }
+rayon = { workspace = true }
+
+sim-core = { workspace = true }
+sim-vehicle = { workspace = true }
+sim-environment = { workspace = true }
+sim-mmast = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[[bench]]
+name = "solver_bench"
+harness = false

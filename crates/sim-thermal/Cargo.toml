@@ -1,0 +1,19 @@
+[package]
+name = "sim-thermal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "VO₂ battery jacket thermal model via CadFuture's FEA thermal solver and radiation heat transfer"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+glam = { workspace = true }
+
+physical-fea = { workspace = true }
+
+sim-core = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

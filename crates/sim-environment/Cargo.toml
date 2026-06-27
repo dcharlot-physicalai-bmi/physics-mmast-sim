@@ -1,0 +1,23 @@
+[package]
+name = "sim-environment"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Environment models — atmosphere, ocean, space, terrain — queryable by position and time"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+nalgebra = { workspace = true }
+glam = { workspace = true }
+
+sim-core = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+
+[[bench]]
+name = "atmosphere_bench"
+harness = false

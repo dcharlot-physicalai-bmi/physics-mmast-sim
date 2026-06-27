@@ -1,0 +1,16 @@
+[package]
+name = "sim-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "WebGPU renderer — subscribes to sim state and renders vehicle, environment, MMAST overlays"
+
+[dependencies]
+wgpu = { workspace = true }
+glam = { workspace = true }
+serde = { workspace = true }
+sim-core = { workspace = true }
+
+# bytemuck for Pod derives (GPU buffer layout)
+bytemuck = { version = "1.22", features = ["derive"] }

@@ -1,0 +1,30 @@
+[package]
+name = "sim-viewer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Native window viewer — live MMAST simulation with WebGPU rendering"
+
+[[bin]]
+name = "mmast-viewer"
+path = "src/main.rs"
+
+[dependencies]
+wgpu = { workspace = true }
+winit = { workspace = true }
+glam = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+bytemuck = { version = "1.22", features = ["derive"] }
+pollster = "0.4"
+
+sim-core = { workspace = true }
+sim-geometry = { workspace = true }
+sim-vehicle = { workspace = true }
+sim-environment = { workspace = true }
+sim-mmast = { workspace = true }
+sim-dynamics = { workspace = true }
+sim-render = { workspace = true }
+sim-report = { workspace = true }

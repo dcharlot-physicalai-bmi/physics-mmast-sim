@@ -1,0 +1,19 @@
+[package]
+name = "sim-report"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Analytical reporting — time-series analysis, sensitivity sweeps, mission feasibility reports"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+rayon = { workspace = true }
+
+sim-core = { workspace = true }
+sim-vehicle = { workspace = true }
+sim-environment = { workspace = true }
+sim-mmast = { workspace = true }
+sim-dynamics = { workspace = true }

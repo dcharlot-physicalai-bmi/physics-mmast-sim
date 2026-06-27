@@ -1,0 +1,19 @@
+[package]
+name = "sim-mmast"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "MMAST module library — composable physics modifiers for energy harvest, thermal management, and signature control"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+sim-core = { workspace = true }
+sim-vehicle = { workspace = true }
+sim-environment = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

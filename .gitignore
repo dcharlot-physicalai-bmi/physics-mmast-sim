@@ -1,0 +1,7 @@
+/target
+Cargo.lock
+*.swp
+.DS_Store
+
+# Machine-specific local-dev overrides (CadFuture path override, incremental off)
+.cargo/config.toml

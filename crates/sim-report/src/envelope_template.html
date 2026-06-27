@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>MMAST Mission Envelope</title>
+<style>
+  :root {
+    --bg:     #05060a;
+    --panel:  rgba(10, 12, 22, 0.78);
+    --fg:     #e6e9f2;
+    --dim:    #8a93a8;
+    --indigo: #6366F1;
+    --cyan:   #22d3ee;
+    --amber:  #F59E0B;
+    --green:  #34d399;
+    --rose:   #fb7185;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Inter", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 36px 28px 60px; }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 14px; font-weight: 600; letter-spacing: 0.18em;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, var(--indigo), var(--cyan), var(--amber));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 13px; }
+
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin: 22px 0 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 14px 16px;
+    backdrop-filter: blur(10px);
+  }
+  .card .label {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim);
+  }
+  .card .val {
+    font-size: 20px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    margin-top: 4px;
+  }
+  .card .val.ok { color: var(--green); }
+  .card .val.bad { color: var(--rose); }
+
+  .heatmap-wrap {
+    position: relative;
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 22px 24px 18px;
+    backdrop-filter: blur(10px);
+  }
+  .heatmap-wrap h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; color: #fff; }
+  .heatmap-wrap .sub { margin: 0 0 16px; font-size: 12px; color: var(--dim); }
+
+  .canvas-container { position: relative; display: inline-block; }
+  canvas {
+    display: block;
+    border-radius: 8px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor: crosshair;
+  }
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(6, 8, 14, 0.95);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--fg);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+    opacity: 0;
+    transition: opacity 0.08s ease;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip .label { color: var(--dim); }
+  #tooltip .feasible { color: var(--green); }
+  #tooltip .infeasible { color: var(--rose); }
+
+  .legend {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 18px; font-size: 11px; color: var(--dim);
+  }
+  .legend-bar {
+    flex: 0 0 280px; height: 10px; border-radius: 6px;
+    background: linear-gradient(90deg,
+      #440154, #482878, #3e4989, #31688e, #26828e,
+      #1f9e89, #35b779, #6ece58, #b5de2b, #fde725);
+  }
+  .legend-scale {
+    display: flex; justify-content: space-between; width: 280px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .sliders {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .slider-row .label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .slider-row .label b {
+    font-variant-numeric: tabular-nums;
+    color: var(--cyan);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: none;
+  }
+  .slider-row input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 6px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 3px;
+    outline: none;
+  }
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--cyan), var(--indigo));
+    cursor: pointer;
+    box-shadow: 0 0 0 2px rgba(34, 211, 238, 0.3);
+  }
+  .slider-row input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: none;
+    background: linear-gradient(180deg, var(--cyan), var(--indigo));
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1 id="title">MMAST Mission Envelope</h1>
+    <p id="subtitle">4D feasibility heatmap</p>
+  </header>
+
+  <section class="summary">
+    <div class="card">
+      <div class="label">Vehicle</div>
+      <div class="val" id="stat-vehicle">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Total cells</div>
+      <div class="val" id="stat-cells">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Slice feasible</div>
+      <div class="val" id="stat-slice-feasible">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Global feasible</div>
+      <div class="val" id="stat-feasible">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Peak margin</div>
+      <div class="val ok" id="stat-peak">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Worst margin</div>
+      <div class="val bad" id="stat-worst">—</div>
+    </div>
+  </section>
+
+  <div class="heatmap-wrap">
+    <h2>Net energy margin — latitude vs cloud cover</h2>
+    <p class="sub">Each cell is a full 24-hour simulation. Scrub altitude and day-of-year to explore the 4D envelope. Darker = infeasible; brighter = net-positive surplus. White contour marks the feasibility boundary.</p>
+    <div class="canvas-container" id="canvas-container">
+      <canvas id="heatmap"></canvas>
+      <div id="tooltip"></div>
+    </div>
+    <div class="legend">
+      <span>Net margin (Wh)</span>
+      <div class="legend-bar"></div>
+      <div class="legend-scale">
+        <span id="legend-min">min</span>
+        <span>0</span>
+        <span id="legend-max">max</span>
+      </div>
+    </div>
+
+    <div class="sliders">
+      <div class="slider-row">
+        <div class="label"><span>Altitude</span><b id="alt-val">—</b></div>
+        <input type="range" id="alt-slider" min="0" max="0" value="0" step="1" />
+      </div>
+      <div class="slider-row">
+        <div class="label"><span>Day of year</span><b id="doy-val">—</b></div>
+        <input type="range" id="doy-slider" min="0" max="0" value="0" step="1" />
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// Envelope JSON is injected at bake time by sim-report::envelope::to_html.
+const ENVELOPE = __ENVELOPE_JSON__;
+
+const canvas = document.getElementById('heatmap');
+const ctx = canvas.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+const container = document.getElementById('canvas-container');
+
+const LAT_BINS = ENVELOPE.lat_bins;
+const CLOUD_BINS = ENVELOPE.cloud_bins;
+const ALT_BINS = ENVELOPE.alt_bins;
+const DOY_BINS = ENVELOPE.doy_bins;
+
+const CELL_SIZE = Math.max(4, Math.min(12, Math.floor(900 / Math.max(LAT_BINS, CLOUD_BINS))));
+
+const PAD_LEFT = 64;
+const PAD_BOTTOM = 52;
+const PAD_TOP = 18;
+const PAD_RIGHT = 18;
+
+const HEATMAP_W = CLOUD_BINS * CELL_SIZE;
+const HEATMAP_H = LAT_BINS * CELL_SIZE;
+
+canvas.width = HEATMAP_W + PAD_LEFT + PAD_RIGHT;
+canvas.height = HEATMAP_H + PAD_TOP + PAD_BOTTOM;
+
+// ---- Viridis colormap ----
+const VIRIDIS = [
+  [ 68,  1, 84], [ 72, 40,120], [ 62, 73,137], [ 49,104,142],
+  [ 38,130,142], [ 31,158,137], [ 53,183,121], [110,206, 88],
+  [181,222, 43], [253,231, 37]
+];
+function viridis(t) {
+  t = Math.max(0, Math.min(1, t));
+  const f = t * (VIRIDIS.length - 1);
+  const i0 = Math.floor(f);
+  const i1 = Math.min(VIRIDIS.length - 1, i0 + 1);
+  const k = f - i0;
+  const c0 = VIRIDIS[i0], c1 = VIRIDIS[i1];
+  return [
+    Math.round(c0[0] + (c1[0] - c0[0]) * k),
+    Math.round(c0[1] + (c1[1] - c0[1]) * k),
+    Math.round(c0[2] + (c1[2] - c0[2]) * k),
+  ];
+}
+
+// ---- Global stats (for stable colormap across slices) ----
+let gMin = Infinity, gMax = -Infinity, gFeasible = 0;
+for (const c of ENVELOPE.cells) {
+  if (c.margin_wh < gMin) gMin = c.margin_wh;
+  if (c.margin_wh > gMax) gMax = c.margin_wh;
+  if (c.margin_wh > 0) gFeasible++;
+}
+const globalFeasibleFrac = gFeasible / ENVELOPE.cells.length;
+
+// ---- Indexing ----
+function cellAt(li, ci, ai, di) {
+  return ENVELOPE.cells[((li * CLOUD_BINS + ci) * ALT_BINS + ai) * DOY_BINS + di];
+}
+function latAt(li) {
+  return LAT_BINS > 1
+    ? ENVELOPE.lat_min + li * (ENVELOPE.lat_max - ENVELOPE.lat_min) / (LAT_BINS - 1)
+    : ENVELOPE.lat_min;
+}
+function cloudAt(ci) {
+  return CLOUD_BINS > 1
+    ? ENVELOPE.cloud_min + ci * (ENVELOPE.cloud_max - ENVELOPE.cloud_min) / (CLOUD_BINS - 1)
+    : ENVELOPE.cloud_min;
+}
+function altAt(ai) {
+  return ALT_BINS > 1
+    ? ENVELOPE.alt_min + ai * (ENVELOPE.alt_max - ENVELOPE.alt_min) / (ALT_BINS - 1)
+    : ENVELOPE.alt_min;
+}
+function doyAt(di) {
+  return DOY_BINS > 1
+    ? Math.round(ENVELOPE.doy_min + di * (ENVELOPE.doy_max - ENVELOPE.doy_min) / (DOY_BINS - 1))
+    : ENVELOPE.doy_min;
+}
+
+// ---- Header fill-in ----
+document.getElementById('title').textContent = `${ENVELOPE.vehicle} — Mission Envelope`;
+document.getElementById('subtitle').textContent =
+  `${LAT_BINS}×${CLOUD_BINS}×${ALT_BINS}×${DOY_BINS} = ${ENVELOPE.cells.length.toLocaleString()} full-day simulations`;
+document.getElementById('stat-vehicle').textContent = ENVELOPE.vehicle;
+document.getElementById('stat-cells').textContent = ENVELOPE.cells.length.toLocaleString();
+
+const feasEl = document.getElementById('stat-feasible');
+feasEl.textContent = `${(globalFeasibleFrac * 100).toFixed(1)}%`;
+feasEl.classList.add(globalFeasibleFrac > 0.5 ? 'ok' : 'bad');
+document.getElementById('stat-peak').textContent = `+${gMax.toFixed(0)} Wh`;
+document.getElementById('stat-worst').textContent = `${gMin.toFixed(0)} Wh`;
+document.getElementById('legend-min').textContent = `${gMin.toFixed(0)}`;
+document.getElementById('legend-max').textContent = `+${gMax.toFixed(0)}`;
+
+// ---- Sliders ----
+const altSlider = document.getElementById('alt-slider');
+const doySlider = document.getElementById('doy-slider');
+const altValLabel = document.getElementById('alt-val');
+const doyValLabel = document.getElementById('doy-val');
+
+altSlider.max = Math.max(0, ALT_BINS - 1);
+doySlider.max = Math.max(0, DOY_BINS - 1);
+// Default to a middle altitude and summer solstice-ish day.
+altSlider.value = Math.floor(ALT_BINS / 2);
+doySlider.value = Math.floor(DOY_BINS / 2);
+
+let currentAi = parseInt(altSlider.value, 10);
+let currentDi = parseInt(doySlider.value, 10);
+
+altSlider.addEventListener('input', () => {
+  currentAi = parseInt(altSlider.value, 10);
+  render();
+});
+doySlider.addEventListener('input', () => {
+  currentDi = parseInt(doySlider.value, 10);
+  render();
+});
+
+// ---- Render ----
+function normalize(margin) {
+  if (margin >= 0) {
+    return 0.5 + 0.5 * (margin / Math.max(gMax, 1));
+  } else {
+    return 0.5 - 0.5 * (Math.abs(margin) / Math.max(Math.abs(gMin), 1));
+  }
+}
+
+function render() {
+  ctx.fillStyle = 'rgba(10, 12, 22, 0.4)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Draw cells for current (alt, doy) slice.
+  let sliceFeasible = 0;
+  const sliceN = LAT_BINS * CLOUD_BINS;
+  for (let li = 0; li < LAT_BINS; li++) {
+    for (let ci = 0; ci < CLOUD_BINS; ci++) {
+      const cell = cellAt(li, ci, currentAi, currentDi);
+      if (cell.margin_wh > 0) sliceFeasible++;
+      const t = normalize(cell.margin_wh);
+      const [r, g, b] = viridis(t);
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const x = PAD_LEFT + ci * CELL_SIZE;
+      const y = PAD_TOP + (LAT_BINS - 1 - li) * CELL_SIZE;
+      ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+    }
+  }
+
+  // Feasibility contour.
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let li = 0; li < LAT_BINS; li++) {
+    for (let ci = 0; ci < CLOUD_BINS - 1; ci++) {
+      const a = cellAt(li, ci, currentAi, currentDi).margin_wh;
+      const b = cellAt(li, ci + 1, currentAi, currentDi).margin_wh;
+      if ((a >= 0) !== (b >= 0)) {
+        const x = PAD_LEFT + (ci + 1) * CELL_SIZE;
+        const y0 = PAD_TOP + (LAT_BINS - 1 - li) * CELL_SIZE;
+        ctx.moveTo(x, y0);
+        ctx.lineTo(x, y0 + CELL_SIZE);
+      }
+    }
+  }
+  for (let li = 0; li < LAT_BINS - 1; li++) {
+    for (let ci = 0; ci < CLOUD_BINS; ci++) {
+      const a = cellAt(li, ci, currentAi, currentDi).margin_wh;
+      const b = cellAt(li + 1, ci, currentAi, currentDi).margin_wh;
+      if ((a >= 0) !== (b >= 0)) {
+        const y = PAD_TOP + (LAT_BINS - 1 - li) * CELL_SIZE;
+        const x0 = PAD_LEFT + ci * CELL_SIZE;
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x0 + CELL_SIZE, y);
+      }
+    }
+  }
+  ctx.stroke();
+
+  // Axes.
+  ctx.fillStyle = '#8a93a8';
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+
+  const yTicks = 5;
+  for (let i = 0; i <= yTicks; i++) {
+    const frac = i / yTicks;
+    const lat = ENVELOPE.lat_min + frac * (ENVELOPE.lat_max - ENVELOPE.lat_min);
+    const y = PAD_TOP + (1 - frac) * HEATMAP_H;
+    ctx.fillText(`${lat.toFixed(0)}°`, PAD_LEFT - 8, y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.moveTo(PAD_LEFT - 4, y);
+    ctx.lineTo(PAD_LEFT, y);
+    ctx.stroke();
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const xTicks = 6;
+  for (let i = 0; i <= xTicks; i++) {
+    const frac = i / xTicks;
+    const cloud = ENVELOPE.cloud_min + frac * (ENVELOPE.cloud_max - ENVELOPE.cloud_min);
+    const x = PAD_LEFT + frac * HEATMAP_W;
+    ctx.fillText(`${(cloud * 100).toFixed(0)}%`, x, PAD_TOP + HEATMAP_H + 6);
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.beginPath();
+    ctx.moveTo(x, PAD_TOP + HEATMAP_H);
+    ctx.lineTo(x, PAD_TOP + HEATMAP_H + 4);
+    ctx.stroke();
+  }
+
+  ctx.fillStyle = '#c9cfdc';
+  ctx.font = '11px -apple-system, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('CLOUD COVER', PAD_LEFT + HEATMAP_W / 2, canvas.height - 6);
+
+  ctx.save();
+  ctx.translate(14, PAD_TOP + HEATMAP_H / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('LATITUDE', 0, 0);
+  ctx.restore();
+
+  // Slider value labels.
+  altValLabel.textContent = `${altAt(currentAi).toFixed(0)} m`;
+  doyValLabel.textContent = `day ${doyAt(currentDi)}`;
+  const sliceFeasEl = document.getElementById('stat-slice-feasible');
+  const frac = sliceFeasible / sliceN;
+  sliceFeasEl.textContent = `${(frac * 100).toFixed(1)}%`;
+  sliceFeasEl.classList.remove('ok', 'bad');
+  sliceFeasEl.classList.add(frac > 0.5 ? 'ok' : 'bad');
+}
+
+render();
+
+// ---- Hover tooltip ----
+canvas.addEventListener('mousemove', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const px = (e.clientX - rect.left) * scaleX - PAD_LEFT;
+  const py = (e.clientY - rect.top) * scaleY - PAD_TOP;
+
+  if (px < 0 || py < 0 || px >= HEATMAP_W || py >= HEATMAP_H) {
+    tooltip.classList.remove('visible');
+    return;
+  }
+  const ci = Math.floor(px / CELL_SIZE);
+  const li = LAT_BINS - 1 - Math.floor(py / CELL_SIZE);
+  if (ci < 0 || ci >= CLOUD_BINS || li < 0 || li >= LAT_BINS) {
+    tooltip.classList.remove('visible');
+    return;
+  }
+
+  const cell = cellAt(li, ci, currentAi, currentDi);
+  const feasible = cell.margin_wh > 0;
+  tooltip.innerHTML = `
+    <div><span class="label">Latitude:</span> ${latAt(li).toFixed(1)}°</div>
+    <div><span class="label">Cloud cover:</span> ${(cloudAt(ci) * 100).toFixed(0)}%</div>
+    <div><span class="label">Altitude:</span> ${altAt(currentAi).toFixed(0)} m</div>
+    <div><span class="label">Day of year:</span> ${doyAt(currentDi)}</div>
+    <div><span class="label">Harvested:</span> ${cell.harvested_wh.toFixed(0)} Wh</div>
+    <div><span class="label">Consumed:</span> ${cell.consumed_wh.toFixed(0)} Wh</div>
+    <div><span class="label">Net margin:</span> <b class="${feasible ? 'feasible' : 'infeasible'}">${feasible ? '+' : ''}${cell.margin_wh.toFixed(0)} Wh</b></div>
+    <div class="${feasible ? 'feasible' : 'infeasible'}">${feasible ? 'FEASIBLE' : 'INFEASIBLE'}</div>
+  `;
+  const containerRect = container.getBoundingClientRect();
+  tooltip.style.left = `${e.clientX - containerRect.left + 14}px`;
+  tooltip.style.top = `${e.clientY - containerRect.top + 14}px`;
+  tooltip.classList.add('visible');
+});
+
+canvas.addEventListener('mouseleave', () => {
+  tooltip.classList.remove('visible');
+});
+
+// Arrow keys scrub the sliders.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft')  { doySlider.value = Math.max(0, currentDi - 1); doySlider.dispatchEvent(new Event('input')); }
+  if (e.key === 'ArrowRight') { doySlider.value = Math.min(DOY_BINS - 1, currentDi + 1); doySlider.dispatchEvent(new Event('input')); }
+  if (e.key === 'ArrowDown')  { altSlider.value = Math.max(0, currentAi - 1); altSlider.dispatchEvent(new Event('input')); }
+  if (e.key === 'ArrowUp')    { altSlider.value = Math.min(ALT_BINS - 1, currentAi + 1); altSlider.dispatchEvent(new Event('input')); }
+});
+</script>
+</body>
+</html>

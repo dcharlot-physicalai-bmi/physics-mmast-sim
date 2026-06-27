@@ -1,0 +1,885 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>MMAST Fleet Atlas</title>
+<style>
+  :root {
+    --bg:     #05060a;
+    --panel:  rgba(10, 12, 22, 0.78);
+    --fg:     #e6e9f2;
+    --dim:    #8a93a8;
+    --indigo: #6366F1;
+    --cyan:   #22d3ee;
+    --amber:  #F59E0B;
+    --green:  #34d399;
+    --rose:   #fb7185;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, "Inter", system-ui, sans-serif;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 36px 28px 60px; }
+  header h1 {
+    margin: 0 0 4px;
+    font-size: 14px; font-weight: 600; letter-spacing: 0.18em;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, var(--indigo), var(--cyan), var(--amber));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 13px; }
+
+  /* ---- Vehicle tabs ---- */
+  .tabs {
+    display: flex;
+    gap: 6px;
+    margin: 22px 0 18px;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    padding-bottom: 0;
+    overflow-x: auto;
+  }
+  .tab {
+    background: none;
+    border: none;
+    color: var(--dim);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.15s ease, border-color 0.15s ease;
+    white-space: nowrap;
+  }
+  .tab:hover { color: var(--fg); }
+  .tab.active {
+    color: var(--cyan);
+    border-bottom-color: var(--cyan);
+  }
+
+  /* ---- Summary cards ---- */
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px;
+    margin-bottom: 22px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 14px 16px;
+    backdrop-filter: blur(10px);
+  }
+  .card .label {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim);
+  }
+  .card .val {
+    font-size: 20px; font-weight: 600;
+    font-variant-numeric: tabular-nums; margin-top: 4px;
+  }
+  .card .val.ok { color: var(--green); }
+  .card .val.bad { color: var(--rose); }
+
+  /* ---- Main layout ---- */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 18px;
+  }
+  .heatmap-wrap, .side-panel {
+    background: var(--panel);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 20px 22px;
+    backdrop-filter: blur(10px);
+  }
+  .heatmap-wrap h2, .side-panel h2 {
+    margin: 0 0 4px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.02em;
+  }
+  .heatmap-wrap .sub, .side-panel .sub {
+    margin: 0 0 14px;
+    font-size: 11px;
+    color: var(--dim);
+  }
+
+  /* ---- Canvas + marginals ---- */
+  .canvas-grid {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    grid-template-rows: 60px 1fr;
+    gap: 0;
+  }
+  .canvas-empty { grid-column: 1; grid-row: 1; }
+  .canvas-top   { grid-column: 2; grid-row: 1; position: relative; }
+  .canvas-left  { grid-column: 1; grid-row: 2; position: relative; }
+  .canvas-main  { grid-column: 2; grid-row: 2; position: relative; }
+  canvas {
+    display: block;
+    border-radius: 8px;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+  #heatmap { cursor: crosshair; }
+  #tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: rgba(6, 8, 14, 0.95);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--fg);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+    opacity: 0;
+    transition: opacity 0.08s ease;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    z-index: 20;
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip .label { color: var(--dim); }
+  #tooltip .feasible { color: var(--green); }
+  #tooltip .infeasible { color: var(--rose); }
+
+  /* ---- Legend + mode toggle ---- */
+  .controls-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+  .legend {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 10px; color: var(--dim);
+  }
+  .legend-bar {
+    flex: 0 0 220px;
+    height: 9px;
+    border-radius: 5px;
+    background: linear-gradient(90deg,
+      #440154, #482878, #3e4989, #31688e, #26828e,
+      #1f9e89, #35b779, #6ece58, #b5de2b, #fde725);
+  }
+  .legend-scale {
+    display: flex; justify-content: space-between; width: 220px;
+    font-variant-numeric: tabular-nums;
+    font-size: 10px;
+  }
+  .view-mode {
+    display: flex;
+    gap: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .view-mode button {
+    background: none;
+    border: none;
+    color: var(--dim);
+    font-family: inherit;
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+  .view-mode button.active {
+    background: rgba(99, 102, 241, 0.3);
+    color: #fff;
+  }
+
+  .png-btn {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: var(--amber);
+    padding: 7px 14px;
+    border-radius: 7px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-left: auto;
+  }
+  .png-btn:hover {
+    background: rgba(245, 158, 11, 0.3);
+    color: #fff;
+  }
+
+  /* ---- Sliders ---- */
+  .sliders {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .slider-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .slider-row .label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+  .slider-row .label b {
+    font-variant-numeric: tabular-nums;
+    color: var(--cyan);
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: none;
+    font-size: 11px;
+  }
+  .slider-row input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 5px;
+    background: rgba(255,255,255,0.12);
+    border-radius: 3px;
+    outline: none;
+  }
+  .slider-row input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: linear-gradient(180deg, var(--cyan), var(--indigo));
+    cursor: pointer;
+  }
+
+  /* ---- Module toggles ---- */
+  .module-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .module-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.12s ease;
+    font-size: 11.5px;
+  }
+  .module-item:hover { background: rgba(255,255,255,0.06); }
+  .module-item.off {
+    opacity: 0.45;
+    background: rgba(255,255,255,0.01);
+  }
+  .module-item input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+    border: 1.5px solid rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.05);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .module-item input[type="checkbox"]:checked {
+    background: var(--cyan);
+    border-color: var(--cyan);
+  }
+  .module-item input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 3px;
+    top: 0px;
+    width: 4px;
+    height: 8px;
+    border: solid #05060a;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .module-item .name { flex: 1; font-size: 11px; }
+  .module-item .val {
+    font-variant-numeric: tabular-nums;
+    color: var(--dim);
+    font-size: 10.5px;
+  }
+  .module-item .val.pos { color: var(--green); }
+  .module-item .val.neg { color: var(--rose); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>MMAST Fleet Atlas</h1>
+    <p id="subtitle">4D feasibility envelopes across the vehicle fleet</p>
+  </header>
+
+  <div class="tabs" id="tabs"></div>
+
+  <section class="summary">
+    <div class="card">
+      <div class="label">Vehicle</div>
+      <div class="val" id="stat-vehicle">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Cells</div>
+      <div class="val" id="stat-cells">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Slice feasible</div>
+      <div class="val" id="stat-slice-feasible">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Global feasible</div>
+      <div class="val" id="stat-feasible">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Peak margin</div>
+      <div class="val ok" id="stat-peak">—</div>
+    </div>
+    <div class="card">
+      <div class="label">Worst margin</div>
+      <div class="val bad" id="stat-worst">—</div>
+    </div>
+  </section>
+
+  <div class="main-grid">
+    <div class="heatmap-wrap">
+      <h2>Net energy margin — latitude vs cloud cover</h2>
+      <p class="sub">Scrub altitude and day-of-year. Toggle modules on the right. Feasibility line is white.</p>
+      <div class="canvas-grid">
+        <div class="canvas-empty"></div>
+        <div class="canvas-top"><canvas id="marginal-top"></canvas></div>
+        <div class="canvas-left"><canvas id="marginal-left"></canvas></div>
+        <div class="canvas-main">
+          <canvas id="heatmap"></canvas>
+          <div id="tooltip"></div>
+        </div>
+      </div>
+
+      <div class="controls-row">
+        <div class="legend">
+          <span id="legend-units">Wh</span>
+          <div class="legend-bar"></div>
+          <div class="legend-scale">
+            <span id="legend-min">min</span>
+            <span>0</span>
+            <span id="legend-max">max</span>
+          </div>
+        </div>
+        <div class="view-mode">
+          <button data-mode="raw" class="active">Raw Wh</button>
+          <button data-mode="ratio">Margin ratio</button>
+        </div>
+        <button class="png-btn" id="png-btn">Export PNG</button>
+      </div>
+
+      <div class="sliders">
+        <div class="slider-row">
+          <div class="label"><span>Altitude</span><b id="alt-val">—</b></div>
+          <input type="range" id="alt-slider" min="0" max="0" value="0" step="1" />
+        </div>
+        <div class="slider-row">
+          <div class="label"><span>Day of year</span><b id="doy-val">—</b></div>
+          <input type="range" id="doy-slider" min="0" max="0" value="0" step="1" />
+        </div>
+      </div>
+    </div>
+
+    <div class="side-panel">
+      <h2>MMAST modules</h2>
+      <p class="sub">Toggle modules to see the envelope with subsystems disabled. Values = this slice's peak contribution.</p>
+      <div class="module-list" id="module-list"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ATLAS = __ATLAS_JSON__;
+
+// ---- DOM refs ----
+const canvas = document.getElementById('heatmap');
+const ctx = canvas.getContext('2d');
+const marginalTop = document.getElementById('marginal-top');
+const mtCtx = marginalTop.getContext('2d');
+const marginalLeft = document.getElementById('marginal-left');
+const mlCtx = marginalLeft.getContext('2d');
+const tooltip = document.getElementById('tooltip');
+const mainCell = document.querySelector('.canvas-main');
+const altSlider = document.getElementById('alt-slider');
+const doySlider = document.getElementById('doy-slider');
+const altValLabel = document.getElementById('alt-val');
+const doyValLabel = document.getElementById('doy-val');
+const moduleList = document.getElementById('module-list');
+const tabsEl = document.getElementById('tabs');
+
+// ---- Viridis colormap ----
+const VIRIDIS = [
+  [ 68,  1, 84], [ 72, 40,120], [ 62, 73,137], [ 49,104,142],
+  [ 38,130,142], [ 31,158,137], [ 53,183,121], [110,206, 88],
+  [181,222, 43], [253,231, 37]
+];
+function viridis(t) {
+  t = Math.max(0, Math.min(1, t));
+  const f = t * (VIRIDIS.length - 1);
+  const i0 = Math.floor(f);
+  const i1 = Math.min(VIRIDIS.length - 1, i0 + 1);
+  const k = f - i0;
+  const c0 = VIRIDIS[i0], c1 = VIRIDIS[i1];
+  return [
+    Math.round(c0[0] + (c1[0] - c0[0]) * k),
+    Math.round(c0[1] + (c1[1] - c0[1]) * k),
+    Math.round(c0[2] + (c1[2] - c0[2]) * k),
+  ];
+}
+
+// ---- State ----
+let currentVehicle = 0;
+let currentAi = 0;
+let currentDi = 0;
+let viewMode = 'raw'; // 'raw' or 'ratio'
+let moduleEnabled = [];
+
+function activeEnvelope() { return ATLAS.envelopes[currentVehicle]; }
+
+// ---- Render a specific envelope with the current toggles ----
+// Returns { harvested, consumed, margin } for a given cell index, respecting module toggles.
+function cellEffective(env, cellIdx) {
+  const N = env.module_names.length;
+  let harvested = 0, consumed = 0;
+  for (let j = 0; j < N; j++) {
+    if (!moduleEnabled[j]) continue;
+    const v = env.module_contributions[cellIdx * N + j];
+    if (v > 0) harvested += v;
+    else if (v < 0) consumed += -v;
+  }
+  return { harvested, consumed, margin: harvested - consumed };
+}
+
+// Compute the global min/max margin across the *current* envelope and toggle state.
+// Recomputed on every re-render, but small-constant work (tight loop over cells).
+function computeGlobalStats(env) {
+  let gMin = Infinity, gMax = -Infinity;
+  let gMinR = Infinity, gMaxR = -Infinity;
+  let feasibleCount = 0;
+  for (let i = 0; i < env.cells.length; i++) {
+    const { margin, consumed } = cellEffective(env, i);
+    if (margin < gMin) gMin = margin;
+    if (margin > gMax) gMax = margin;
+    const ratio = consumed > 0 ? margin / consumed : 0;
+    if (ratio < gMinR) gMinR = ratio;
+    if (ratio > gMaxR) gMaxR = ratio;
+    if (margin > 0) feasibleCount++;
+  }
+  return { gMin, gMax, gMinR, gMaxR, feasibleFrac: feasibleCount / env.cells.length };
+}
+
+function axisVal(i, min, max, bins) {
+  return bins > 1 ? min + i * (max - min) / (bins - 1) : min;
+}
+function doyVal(env, di) {
+  return env.doy_bins > 1
+    ? Math.round(env.doy_min + di * (env.doy_max - env.doy_min) / (env.doy_bins - 1))
+    : env.doy_min;
+}
+
+function cellIndex(env, li, ci, ai, di) {
+  return ((li * env.cloud_bins + ci) * env.alt_bins + ai) * env.doy_bins + di;
+}
+
+// ---- Layout ----
+const CELL_SIZE_TARGET = 9;
+let CELL_SIZE = CELL_SIZE_TARGET;
+const PAD_LEFT = 60;
+const PAD_BOTTOM = 42;
+const PAD_TOP = 10;
+const PAD_RIGHT = 10;
+
+function layout(env) {
+  const bigAxis = Math.max(env.lat_bins, env.cloud_bins);
+  CELL_SIZE = Math.max(5, Math.min(12, Math.floor(820 / bigAxis)));
+  const hmW = env.cloud_bins * CELL_SIZE;
+  const hmH = env.lat_bins * CELL_SIZE;
+  canvas.width = hmW + PAD_LEFT + PAD_RIGHT;
+  canvas.height = hmH + PAD_TOP + PAD_BOTTOM;
+  // Marginal canvases
+  marginalTop.width = hmW + PAD_LEFT + PAD_RIGHT;
+  marginalTop.height = 60;
+  marginalLeft.width = 80;
+  marginalLeft.height = hmH + PAD_TOP + PAD_BOTTOM;
+  return { hmW, hmH };
+}
+
+// ---- Main render ----
+function render() {
+  const env = activeEnvelope();
+  const { hmW, hmH } = layout(env);
+  const stats = computeGlobalStats(env);
+
+  const useRatio = viewMode === 'ratio';
+  const minV = useRatio ? stats.gMinR : stats.gMin;
+  const maxV = useRatio ? stats.gMaxR : stats.gMax;
+
+  const normalize = (v) => {
+    if (v >= 0) return 0.5 + 0.5 * (v / Math.max(maxV, 1e-6));
+    return 0.5 - 0.5 * (Math.abs(v) / Math.max(Math.abs(minV), 1e-6));
+  };
+
+  // Background.
+  ctx.fillStyle = 'rgba(10, 12, 22, 0.4)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let sliceFeasible = 0;
+  const sliceTotal = env.lat_bins * env.cloud_bins;
+
+  // Store slice margins for marginal plots.
+  const sliceMargins = new Float32Array(env.lat_bins * env.cloud_bins);
+
+  for (let li = 0; li < env.lat_bins; li++) {
+    for (let ci = 0; ci < env.cloud_bins; ci++) {
+      const idx = cellIndex(env, li, ci, currentAi, currentDi);
+      const eff = cellEffective(env, idx);
+      if (eff.margin > 0) sliceFeasible++;
+      const v = useRatio
+        ? (eff.consumed > 0 ? eff.margin / eff.consumed : 0)
+        : eff.margin;
+      sliceMargins[li * env.cloud_bins + ci] = eff.margin;
+
+      const [r, g, b] = viridis(normalize(v));
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      const x = PAD_LEFT + ci * CELL_SIZE;
+      const y = PAD_TOP + (env.lat_bins - 1 - li) * CELL_SIZE;
+      ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+    }
+  }
+
+  // Feasibility contour from margins (margin=0 is the boundary).
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  const margAt = (li, ci) => sliceMargins[li * env.cloud_bins + ci];
+  for (let li = 0; li < env.lat_bins; li++) {
+    for (let ci = 0; ci < env.cloud_bins - 1; ci++) {
+      if ((margAt(li, ci) >= 0) !== (margAt(li, ci + 1) >= 0)) {
+        const x = PAD_LEFT + (ci + 1) * CELL_SIZE;
+        const y0 = PAD_TOP + (env.lat_bins - 1 - li) * CELL_SIZE;
+        ctx.moveTo(x, y0);
+        ctx.lineTo(x, y0 + CELL_SIZE);
+      }
+    }
+  }
+  for (let li = 0; li < env.lat_bins - 1; li++) {
+    for (let ci = 0; ci < env.cloud_bins; ci++) {
+      if ((margAt(li, ci) >= 0) !== (margAt(li + 1, ci) >= 0)) {
+        const y = PAD_TOP + (env.lat_bins - 1 - li) * CELL_SIZE;
+        const x0 = PAD_LEFT + ci * CELL_SIZE;
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x0 + CELL_SIZE, y);
+      }
+    }
+  }
+  ctx.stroke();
+
+  // Axis ticks + titles.
+  ctx.fillStyle = '#8a93a8';
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 5; i++) {
+    const frac = i / 5;
+    const lat = env.lat_min + frac * (env.lat_max - env.lat_min);
+    const y = PAD_TOP + (1 - frac) * hmH;
+    ctx.fillText(`${lat.toFixed(0)}°`, PAD_LEFT - 6, y);
+  }
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (let i = 0; i <= 6; i++) {
+    const frac = i / 6;
+    const cloud = env.cloud_min + frac * (env.cloud_max - env.cloud_min);
+    const x = PAD_LEFT + frac * hmW;
+    ctx.fillText(`${(cloud * 100).toFixed(0)}%`, x, PAD_TOP + hmH + 6);
+  }
+  ctx.fillStyle = '#c9cfdc';
+  ctx.font = '10px -apple-system, sans-serif';
+  ctx.fillText('CLOUD COVER', PAD_LEFT + hmW / 2, PAD_TOP + hmH + 22);
+
+  // ---- Marginal plots ----
+  // Top: feasibility fraction vs cloud cover.
+  mtCtx.clearRect(0, 0, marginalTop.width, marginalTop.height);
+  mtCtx.strokeStyle = 'rgba(99,102,241,0.9)';
+  mtCtx.lineWidth = 1.5;
+  mtCtx.beginPath();
+  for (let ci = 0; ci < env.cloud_bins; ci++) {
+    let f = 0;
+    for (let li = 0; li < env.lat_bins; li++) {
+      if (margAt(li, ci) > 0) f++;
+    }
+    const frac = f / env.lat_bins;
+    const x = PAD_LEFT + (ci + 0.5) * CELL_SIZE;
+    const y = marginalTop.height - 8 - frac * (marginalTop.height - 16);
+    if (ci === 0) mtCtx.moveTo(x, y);
+    else mtCtx.lineTo(x, y);
+  }
+  mtCtx.stroke();
+  // Top marginal axis guide.
+  mtCtx.strokeStyle = 'rgba(255,255,255,0.08)';
+  mtCtx.lineWidth = 1;
+  mtCtx.beginPath();
+  mtCtx.moveTo(PAD_LEFT, marginalTop.height - 8);
+  mtCtx.lineTo(PAD_LEFT + hmW, marginalTop.height - 8);
+  mtCtx.stroke();
+  mtCtx.fillStyle = '#8a93a8';
+  mtCtx.font = '9px -apple-system, sans-serif';
+  mtCtx.textAlign = 'left';
+  mtCtx.textBaseline = 'top';
+  mtCtx.fillText('Feasibility vs cloud', PAD_LEFT + 4, 4);
+
+  // Left: feasibility fraction vs latitude.
+  mlCtx.clearRect(0, 0, marginalLeft.width, marginalLeft.height);
+  mlCtx.strokeStyle = 'rgba(34,211,238,0.9)';
+  mlCtx.lineWidth = 1.5;
+  mlCtx.beginPath();
+  for (let li = 0; li < env.lat_bins; li++) {
+    let f = 0;
+    for (let ci = 0; ci < env.cloud_bins; ci++) {
+      if (margAt(li, ci) > 0) f++;
+    }
+    const frac = f / env.cloud_bins;
+    const y = PAD_TOP + (env.lat_bins - 1 - li + 0.5) * CELL_SIZE;
+    const x = marginalLeft.width - 8 - frac * (marginalLeft.width - 16);
+    if (li === 0) mlCtx.moveTo(x, y);
+    else mlCtx.lineTo(x, y);
+  }
+  mlCtx.stroke();
+  mlCtx.strokeStyle = 'rgba(255,255,255,0.08)';
+  mlCtx.lineWidth = 1;
+  mlCtx.beginPath();
+  mlCtx.moveTo(marginalLeft.width - 8, PAD_TOP);
+  mlCtx.lineTo(marginalLeft.width - 8, PAD_TOP + hmH);
+  mlCtx.stroke();
+  mlCtx.save();
+  mlCtx.translate(8, PAD_TOP + hmH / 2);
+  mlCtx.rotate(-Math.PI / 2);
+  mlCtx.fillStyle = '#8a93a8';
+  mlCtx.font = '9px -apple-system, sans-serif';
+  mlCtx.textAlign = 'center';
+  mlCtx.textBaseline = 'bottom';
+  mlCtx.fillText('Feasibility vs latitude', 0, 0);
+  mlCtx.restore();
+
+  // ---- Summary cards ----
+  const frac = sliceFeasible / sliceTotal;
+  const sliceFeasEl = document.getElementById('stat-slice-feasible');
+  sliceFeasEl.textContent = `${(frac * 100).toFixed(1)}%`;
+  sliceFeasEl.classList.remove('ok', 'bad');
+  sliceFeasEl.classList.add(frac > 0.5 ? 'ok' : 'bad');
+
+  const feasEl = document.getElementById('stat-feasible');
+  feasEl.textContent = `${(stats.feasibleFrac * 100).toFixed(1)}%`;
+  feasEl.classList.remove('ok', 'bad');
+  feasEl.classList.add(stats.feasibleFrac > 0.5 ? 'ok' : 'bad');
+
+  document.getElementById('stat-vehicle').textContent = env.vehicle;
+  document.getElementById('stat-cells').textContent = env.cells.length.toLocaleString();
+  document.getElementById('stat-peak').textContent = `+${stats.gMax.toFixed(0)} Wh`;
+  document.getElementById('stat-worst').textContent = `${stats.gMin.toFixed(0)} Wh`;
+
+  // Legend update.
+  if (useRatio) {
+    document.getElementById('legend-units').textContent = 'Margin / consumed';
+    document.getElementById('legend-min').textContent = stats.gMinR.toFixed(2);
+    document.getElementById('legend-max').textContent = `+${stats.gMaxR.toFixed(2)}`;
+  } else {
+    document.getElementById('legend-units').textContent = 'Net margin (Wh)';
+    document.getElementById('legend-min').textContent = `${stats.gMin.toFixed(0)}`;
+    document.getElementById('legend-max').textContent = `+${stats.gMax.toFixed(0)}`;
+  }
+
+  // Slider value labels.
+  altValLabel.textContent = `${axisVal(currentAi, env.alt_min, env.alt_max, env.alt_bins).toFixed(0)} m`;
+  doyValLabel.textContent = `day ${doyVal(env, currentDi)}`;
+
+  updateModuleList(env);
+}
+
+// ---- Module side panel ----
+function updateModuleList(env) {
+  moduleList.innerHTML = '';
+  const N = env.module_names.length;
+
+  // Peak contribution of each module in current slice (for display only).
+  const peak = new Array(N).fill(0);
+  for (let li = 0; li < env.lat_bins; li++) {
+    for (let ci = 0; ci < env.cloud_bins; ci++) {
+      const idx = cellIndex(env, li, ci, currentAi, currentDi);
+      const base = idx * N;
+      for (let j = 0; j < N; j++) {
+        const v = env.module_contributions[base + j];
+        if (Math.abs(v) > Math.abs(peak[j])) peak[j] = v;
+      }
+    }
+  }
+
+  for (let j = 0; j < N; j++) {
+    const item = document.createElement('label');
+    item.className = 'module-item';
+    if (!moduleEnabled[j]) item.classList.add('off');
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = moduleEnabled[j];
+    cb.addEventListener('change', () => {
+      moduleEnabled[j] = cb.checked;
+      render();
+    });
+
+    const name = document.createElement('span');
+    name.className = 'name';
+    name.textContent = env.module_names[j];
+
+    const val = document.createElement('span');
+    val.className = 'val ' + (peak[j] >= 0 ? 'pos' : 'neg');
+    const absPeak = Math.abs(peak[j]);
+    val.textContent = `${peak[j] >= 0 ? '+' : '−'}${absPeak.toFixed(0)} Wh`;
+
+    item.appendChild(cb);
+    item.appendChild(name);
+    item.appendChild(val);
+    moduleList.appendChild(item);
+  }
+}
+
+// ---- Initialize state for current vehicle ----
+function selectVehicle(idx) {
+  currentVehicle = idx;
+  const env = ATLAS.envelopes[idx];
+  moduleEnabled = new Array(env.module_names.length).fill(true);
+  currentAi = Math.min(parseInt(altSlider.value, 10), env.alt_bins - 1);
+  currentDi = Math.min(parseInt(doySlider.value, 10), env.doy_bins - 1);
+  altSlider.max = Math.max(0, env.alt_bins - 1);
+  doySlider.max = Math.max(0, env.doy_bins - 1);
+  if (currentAi > env.alt_bins - 1) currentAi = Math.floor(env.alt_bins / 2);
+  if (currentDi > env.doy_bins - 1) currentDi = Math.floor(env.doy_bins / 2);
+  altSlider.value = currentAi;
+  doySlider.value = currentDi;
+
+  for (const btn of tabsEl.querySelectorAll('.tab')) {
+    btn.classList.toggle('active', parseInt(btn.dataset.idx, 10) === idx);
+  }
+  render();
+}
+
+// ---- Tabs ----
+ATLAS.envelopes.forEach((env, i) => {
+  const btn = document.createElement('button');
+  btn.className = 'tab' + (i === 0 ? ' active' : '');
+  btn.dataset.idx = i;
+  btn.textContent = env.vehicle;
+  btn.addEventListener('click', () => selectVehicle(i));
+  tabsEl.appendChild(btn);
+});
+
+document.getElementById('subtitle').textContent =
+  `${ATLAS.envelopes.length} vehicles · ${ATLAS.envelopes.reduce((s, e) => s + e.cells.length, 0).toLocaleString()} total simulated cells`;
+
+selectVehicle(0);
+
+// ---- Sliders ----
+altSlider.addEventListener('input', () => { currentAi = parseInt(altSlider.value, 10); render(); });
+doySlider.addEventListener('input', () => { currentDi = parseInt(doySlider.value, 10); render(); });
+
+// ---- View mode ----
+document.querySelectorAll('.view-mode button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    viewMode = btn.dataset.mode;
+    document.querySelectorAll('.view-mode button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    render();
+  });
+});
+
+// ---- PNG export ----
+document.getElementById('png-btn').addEventListener('click', () => {
+  const env = activeEnvelope();
+  const link = document.createElement('a');
+  link.download = `mmast-${env.vehicle.replace(/\s+/g, '_')}-alt${currentAi}-doy${currentDi}.png`;
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+// ---- Hover tooltip ----
+canvas.addEventListener('mousemove', (e) => {
+  const env = activeEnvelope();
+  const rect = canvas.getBoundingClientRect();
+  const sx = canvas.width / rect.width;
+  const sy = canvas.height / rect.height;
+  const px = (e.clientX - rect.left) * sx - PAD_LEFT;
+  const py = (e.clientY - rect.top) * sy - PAD_TOP;
+  const hmW = env.cloud_bins * CELL_SIZE;
+  const hmH = env.lat_bins * CELL_SIZE;
+  if (px < 0 || py < 0 || px >= hmW || py >= hmH) {
+    tooltip.classList.remove('visible');
+    return;
+  }
+  const ci = Math.floor(px / CELL_SIZE);
+  const li = env.lat_bins - 1 - Math.floor(py / CELL_SIZE);
+  if (ci < 0 || ci >= env.cloud_bins || li < 0 || li >= env.lat_bins) {
+    tooltip.classList.remove('visible');
+    return;
+  }
+  const idx = cellIndex(env, li, ci, currentAi, currentDi);
+  const eff = cellEffective(env, idx);
+  const feasible = eff.margin > 0;
+  const lat = axisVal(li, env.lat_min, env.lat_max, env.lat_bins);
+  const cloud = axisVal(ci, env.cloud_min, env.cloud_max, env.cloud_bins);
+  const alt = axisVal(currentAi, env.alt_min, env.alt_max, env.alt_bins);
+  const doy = doyVal(env, currentDi);
+
+  tooltip.innerHTML = `
+    <div><span class="label">Latitude:</span> ${lat.toFixed(1)}°</div>
+    <div><span class="label">Cloud cover:</span> ${(cloud * 100).toFixed(0)}%</div>
+    <div><span class="label">Altitude:</span> ${alt.toFixed(0)} m</div>
+    <div><span class="label">Day of year:</span> ${doy}</div>
+    <div><span class="label">Harvested:</span> ${eff.harvested.toFixed(0)} Wh</div>
+    <div><span class="label">Consumed:</span> ${eff.consumed.toFixed(0)} Wh</div>
+    <div><span class="label">Margin:</span> <b class="${feasible ? 'feasible' : 'infeasible'}">${feasible ? '+' : ''}${eff.margin.toFixed(0)} Wh</b></div>
+    <div class="${feasible ? 'feasible' : 'infeasible'}">${feasible ? 'FEASIBLE' : 'INFEASIBLE'}</div>
+  `;
+  const mainRect = mainCell.getBoundingClientRect();
+  tooltip.style.left = `${e.clientX - mainRect.left + 14}px`;
+  tooltip.style.top = `${e.clientY - mainRect.top + 14}px`;
+  tooltip.classList.add('visible');
+});
+
+canvas.addEventListener('mouseleave', () => { tooltip.classList.remove('visible'); });
+
+// Keyboard scrubbing.
+document.addEventListener('keydown', (e) => {
+  const env = activeEnvelope();
+  if (e.key === 'ArrowLeft')  { currentDi = Math.max(0, currentDi - 1); doySlider.value = currentDi; render(); }
+  if (e.key === 'ArrowRight') { currentDi = Math.min(env.doy_bins - 1, currentDi + 1); doySlider.value = currentDi; render(); }
+  if (e.key === 'ArrowDown')  { currentAi = Math.max(0, currentAi - 1); altSlider.value = currentAi; render(); }
+  if (e.key === 'ArrowUp')    { currentAi = Math.min(env.alt_bins - 1, currentAi + 1); altSlider.value = currentAi; render(); }
+});
+</script>
+</body>
+</html>
